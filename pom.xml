@@ -7,7 +7,11 @@
     <groupId>it.luke</groupId>
     <artifactId>Antrl4_Plsql</artifactId>
     <version>1.0-SNAPSHOT</version>
-
+    <properties>
+        <java.version>1.8</java.version>
+        <maven.compiler.source>8</maven.compiler.source>
+        <maven.compiler.target>8</maven.compiler.target>
+    </properties>
     <dependencies>
         <!--图数据库 连接驱动 neo4j-->
         <dependency>
@@ -33,6 +37,48 @@
             <version>4.12</version>
             <scope>compile</scope>
         </dependency>
+
+        <!-- Apache Atlas -->
+        <dependency>
+            <groupId>org.apache.atlas</groupId>
+            <artifactId>atlas-client-common</artifactId>
+            <version>2.1.0</version>
+            <exclusions>
+                <exclusion>
+                    <artifactId>slf4j-log4j12</artifactId>
+                    <groupId>org.slf4j</groupId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+        <!-- Apache Atlas Client  Version2 -->
+        <dependency>
+            <groupId>org.apache.atlas</groupId>
+            <artifactId>atlas-client-v2</artifactId>
+            <version>2.1.0</version>
+            <exclusions>
+                <exclusion>
+                    <artifactId>slf4j-log4j12</artifactId>
+                    <groupId>org.slf4j</groupId>
+                </exclusion>
+                <exclusion>
+                    <artifactId>log4j</artifactId>
+                    <groupId>log4j</groupId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+        <dependency>
+            <groupId>com.alibaba</groupId>
+            <artifactId>fastjson</artifactId>
+            <version>1.2.78</version>
+        </dependency>
+
+
+        <dependency>
+            <groupId>com.squareup.okhttp3</groupId>
+            <artifactId>okhttp</artifactId>
+            <version>3.10.0</version>
+        </dependency>
+
     </dependencies>
     <build>
         <plugins>

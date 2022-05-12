@@ -22,7 +22,7 @@ public class APP {
 
     public static void main(String[] args) {
         //测试
-        Driver driver = GraphDatabase.driver("bolt://localhost:7687", AuthTokens.basic("neo4j", "admin"));
+        Driver driver = GraphDatabase.driver("bolt://192-168-80-54/:7687", AuthTokens.basic("neo4j", "neo4j123"));
         Session session = driver.session();
         session.run("CREATE (a:Person {name: {name}, title: {title}})",
                 parameters("name", "Arthur001", "title", "King001"));
@@ -43,7 +43,7 @@ public class APP {
      * @return
      */
     static public Session getConnect() {
-        driver = GraphDatabase.driver("bolt://localhost:7687", AuthTokens.basic("neo4j", "admin"));
+        driver = GraphDatabase.driver("bolt://192-168-80-54:7687", AuthTokens.basic("neo4j", "neo4j123"));
         Session session = driver.session();
         return session;
     }
