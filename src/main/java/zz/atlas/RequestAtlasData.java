@@ -2,6 +2,7 @@ package zz.atlas;
 
 import com.alibaba.fastjson.JSONArray;
 import com.alibaba.fastjson.JSONObject;
+import com.google.gson.JsonObject;
 import com.sun.jersey.core.util.MultivaluedMapImpl;
 import org.apache.atlas.AtlasClientV2;
 import org.apache.atlas.AtlasServiceException;
@@ -9,6 +10,7 @@ import org.apache.atlas.model.SearchFilter;
 import org.apache.atlas.model.impexp.AtlasServer;
 import org.apache.atlas.model.instance.AtlasEntity;
 import org.apache.atlas.model.typedef.*;
+import org.apache.avro.data.Json;
 import org.neo4j.driver.v1.*;
 
 import java.math.BigInteger;
@@ -30,34 +32,34 @@ public class RequestAtlasData {
 
         AtlasClientV2 atlasClientV2 = new AtlasClientV2(new String[]{"http://192-168-80-52:21000"}, new String[]{"admin", "admin"});
 
-        //测试
+        //neo4j
         Driver driver = GraphDatabase.driver("bolt://192-168-80-54/:7687", AuthTokens.basic("neo4j", "neo4j123"));
         Session session = driver.session();
         JSONObject jsonObject = null;
-
-        MultivaluedMapImpl paramMap = new MultivaluedMapImpl();
-        paramMap.add("typeName", "hive_table");//这里添加要搜索的类型
-        paramMap.add("limit", "5000");//这里添加要搜索的类型
-        paramMap.add("offset", "0");//这里添加要搜索的类型
-        paramMap.add("query", "dws_data_map_shop_tags_dd*");//这里添加要搜索的类型
-        try {
-            jsonObject = atlasClientV2.callAPI(AtlasClientV2.API_V2.BASIC_SEARCH, JSONObject.class, paramMap);
-            System.out.println("aaa");
-        } catch (AtlasServiceException e) {
-            e.printStackTrace();
-        }
-
+//
+//        MultivaluedMapImpl paramMap = new MultivaluedMapImpl();
+//        paramMap.add("typeName", "hive_table");//这里添加要搜索的类型
+//        paramMap.add("limit", "5000");//这里添加要搜索的类型
+//        paramMap.add("offset", "0");//这里添加要搜索的类型
+//        paramMap.add("query", "dws_data_map_shop_tags_dd*");//这里添加要搜索的类型
 //        try {
-//            ArrayList<String> neoTableGuidList = createNeoTable(atlasClientV2, session);
+//            jsonObject = atlasClientV2.callAPI(AtlasClientV2.API_V2.BASIC_SEARCH, JSONObject.class, paramMap);
+//            System.out.println("aaa");
+//        } catch (AtlasServiceException e) {
+//            e.printStackTrace();
+//        }
+
+        try {
+            ArrayList<String> neoTableGuidList = createNeoTable(atlasClientV2, session);
 //            createNeoProcess(atlasClientV2, session, "hive_process");
 //            createNeoProcess(atlasClientV2, session, "hive_process_execution");
-//            for (String id : neoTableGuidList) {
-//                createLineage(atlasClientV2, session, id);
-//            }
-//        } finally {
-//            session.close();
-//            driver.close();
-//        }
+            for (String id : neoTableGuidList) {
+                createLineage(atlasClientV2, session, id);
+            }
+        } finally {
+            session.close();
+            driver.close();
+        }
 
 
     }
@@ -67,8 +69,8 @@ public class RequestAtlasData {
         SimpleDateFormat dataFormat = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
         MultivaluedMapImpl paramMap = new MultivaluedMapImpl();
         paramMap.add("typeName", "hive_table");//这里添加要搜索的类型
-        paramMap.add("limit", "5000");//这里添加要搜索的类型
-        paramMap.add("offset", "0");//这里添加要搜索的类型
+        paramMap.add("limit", "5000");
+        paramMap.add("offset", "0");
 
         ArrayList<String> tableGuidList = new ArrayList<String>();
 
@@ -89,8 +91,8 @@ public class RequestAtlasData {
                     BigInteger createTime = attributes.getBigInteger("createTime");
                     String format = dataFormat.format(createTime);
 
-                    session.run("CREATE ( a:hive_table  {name: {name}, db: {db}, owner: {owner}, createTime: {createTime}, guid: {guid}})",
-                            parameters("name", name, "db", db, "owner", owner, "createTime", format, "guid", guid));
+                    session.run("merge ( "+name+":"+db+"  {name: {name}, db: {db}, owner: {owner},  guid: {guid}})",
+                            parameters("name", name, "db", db, "owner", owner,  "guid", guid));
                     tableGuidList.add(guid);
                 }
             }
@@ -124,7 +126,7 @@ public class RequestAtlasData {
                     String db = qualifiedName.split("\\.")[0].replace("-", "").replace(">", "")
                             .replace("QUERY:", "");
 
-                    session.run("CREATE ( b:process {name: {name}, db: {db},  guid: {guid}})",
+                    session.run("merge ( b:process {name: {name}, db: {db},  guid: {guid}})",
                             parameters("guid", guid, "db", db, "name", name));
                 }
             }
@@ -144,14 +146,71 @@ public class RequestAtlasData {
         try {
             jsonObject = atlasClientV2.callAPI(AtlasClientV2.API_V2.LINEAGE_INFO, JSONObject.class, paramMap, guid);
 
+            JSONObject guidEntityMap = jsonObject.getJSONObject("guidEntityMap");
+            ArrayList<HashMap<String, String>> mapArrayList = new ArrayList<HashMap<String, String>>();
+
             JSONArray relations = jsonObject.getJSONArray("relations");
+            if (relations.size() == 0) {
+                return;
+            }
+
             for (int i = 0; i < relations.size(); i++) {
                 String fromEntityId = relations.getJSONObject(i).getString("fromEntityId");
                 String toEntityId = relations.getJSONObject(i).getString("toEntityId");
-                String relationshipId = relations.getJSONObject(i).getString("relationshipId");
+                String fromTypeName = guidEntityMap.getJSONObject(fromEntityId).getString("typeName");
+                String fromStatus = guidEntityMap.getJSONObject(fromEntityId).getString("status");
+                String toTypeName = guidEntityMap.getJSONObject(toEntityId).getString("typeName");
+                String toStatus = guidEntityMap.getJSONObject(toEntityId).getString("status");
+                if (fromStatus.equals("ACTIVE")) {
+                    if (fromTypeName.equals("hive_table")) {
+                        HashMap<String, String> tablesLinkHashMap = new HashMap<String, String>();
+                        String nameFrom = guidEntityMap.getJSONObject(fromEntityId).getJSONObject("attributes").getString("name");
+                        String qualifiedName = guidEntityMap.getJSONObject(fromEntityId).getJSONObject("attributes").getString("qualifiedName");
+                        String dbFrom = qualifiedName.split("\\.")[0];
+                        if (!toTypeName.equals("hive_table")) {
+                            for (int j = 0; j < relations.size(); j++) {
+                                String entityIdFrom = relations.getJSONObject(j).getString("fromEntityId");
+                                if ( entityIdFrom.equals(toEntityId)) {
+                                    String entityIdTo = relations.getJSONObject(j).getString("toEntityId");
+                                    JSONObject entityTo = guidEntityMap.getJSONObject(entityIdTo);
+                                    String status = entityTo.getString("status");
+                                    String typeName = entityTo.getString("typeName");
+                                    String nameTo = entityTo.getJSONObject("attributes").getString("name");
+                                    String qualifiedNameTo = entityTo.getJSONObject("attributes").getString("qualifiedName");
+                                    String dbTo = qualifiedNameTo.split("\\.")[0];
+                                    if (status.equals("ACTIVE") && typeName.equals("hive_table")) {
+                                        tablesLinkHashMap.put("from", fromEntityId);
+                                        tablesLinkHashMap.put("to", entityIdTo);
+                                        tablesLinkHashMap.put("dbFrom", dbFrom);
+                                        tablesLinkHashMap.put("dbTo", dbTo);
+                                        tablesLinkHashMap.put("nameFrom", nameFrom);
+                                        tablesLinkHashMap.put("nameTo", nameTo);
+                                        mapArrayList.add(tablesLinkHashMap);
+                                    }
+                                }
+                            }
+                        }else {
+                            tablesLinkHashMap.put("from", fromEntityId);
+                            tablesLinkHashMap.put("to", toEntityId);
+                            mapArrayList.add(tablesLinkHashMap);
+                        }
 
-                session.run("match (a {guid:\'" + fromEntityId + "\'}), (b {guid:\'" + toEntityId + "\'}) MERGE (a)-[:output]->(b)");
+                    }
+                }
+
             }
+
+            for (Map<String, String> map : mapArrayList) {
+                String from = map.get("from");
+                String to = map.get("to");
+                String dbFrom = map.get("dbFrom");
+                String dbTo = map.get("dbTo");
+                String nameFrom = map.get("nameFrom");
+                String nameTo = map.get("nameTo");
+                session.run("match ( "+nameFrom+":"+dbFrom+" {guid:\'" + from + "\'}), ("+nameTo+":"+dbTo+" {guid:\'" + to + "\'}) MERGE ("+nameFrom+")-[:output]->("+nameTo+")");
+//                session.run("MERGE ("+nameFrom+":"+dbFrom+"{guid:\'" + from + "\'})-[:output]->("+nameTo+":"+dbTo+"{guid:\'" + to + "\'})");
+            }
+
 
         } catch (AtlasServiceException e) {
             e.printStackTrace();
