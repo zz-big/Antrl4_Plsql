@@ -1,0 +1,36 @@
+--impala
+{
+  "database": "dc_tmp",
+  "coordinator": {
+    "hostId": "4a050479-e1c7-4db6-b214-2809a1935fbb"
+  },
+  "statement": "with tab1 as(\r\n-- 每日明细表job_number \t日期\t周数1\t周数2\t线下拜访\t线上拜访\t有效线下拜访\t日线下目标\t日线上目标\r\nSELECT\r\n a.d_date\r\n,a.job_number\r\n,b.d_week1\r\n,b.d_week2\r\n,ifnull(c.sum_valid_offline ,0 )    sum_valid_offline \r\n,ifnull(c.sum_valid_offline1,0 )    sum_valid_offline1\r\n,ifnull(c.sum_valid_online  ,0 )    sum_valid_online  \r\n,1                             as   offline_target\r\n,if(sum_valid_offline\u003e\u003d1,10,50) as   online_target\r\nFROM\r\n(\r\n-- 日期、人员笛卡尔乘积\r\nselect \r\nt1.d_date\r\n,t2.job_number\r\nfrom\r\n(select \r\nd_date\r\nfrom\r\ndc_tmp.rili_date \r\n) t1\r\ncross join\r\n(\r\nselect\r\njob_number\r\nfrom dc_dim.dim_emp_account_info_dd_1\r\nwhere partition_day \u003dto_date(date_sub(now(),1))\r\nand dept1_name\u003d\u0027CBG\u0027 AND post\u003d\u0027渠道经理\u0027 and (leave_time is null or substr(leave_time,1,7)\u003dsubstr(cast(now() as string),1,7))\r\nand dept3_name not like \u0027%分区%\u0027\r\n) t2\r\n) a\r\nleft join \r\ndc_tmp.rili_date b\r\non a.d_date\u003db.d_date\r\nleft join \r\n(--每日每天拜访情况\r\nSELECT\r\njob_number\r\n,substr(create_time,1,10) as create_date\r\n,ifnull(sum(valid_offline)       ,0) as sum_valid_offline\r\n,ifnull(sum(valid_offlinesum)    ,0) as sum_valid_offline1\r\n,ifnull(sum(valid_online_visit)  ,0) as sum_valid_online\r\nFROM\r\ndc_tmp.ads_cbg_visit_dd\r\nwhere dept2_name is not null  and post\u003d\u0027渠道经理\u0027 and business_type\u003d\u0027渠道拓展\u0027 and visit_type\u003d\u0027visit\u0027\r\ngroup by\r\njob_number,substr(create_time,1,10)\r\n) c\r\non a.d_date\u003dc.create_date and a.job_number\u003dc.job_number\r\n)\r\nSELECT\r\na3.dept2_name\r\n,a3.dept3_name\r\n,a3.user_name\r\n,w1.job_number           \r\n,w.sum_valid_offline       as w_sum_valid_offline   \r\n,w.sum_valid_offline1      as w_sum_valid_offline1\r\n,w.sum_valid_online        as w_sum_valid_online\r\n,wt.offline_target         as wt_offline_target\r\n,wt.online_target          as wt_online_target \r\n,w1.job_number             as w1_job_number\r\n,w1.sum_valid_offline      as w1_sum_valid_offline\r\n,w1.sum_valid_offline1     as w1_sum_valid_offline1\r\n,w1.sum_valid_online       as w1_sum_valid_online\r\n,wt1.offline_target        as wt1_offline_target\r\n,wt1.online_target         as wt1_online_target \r\n,w2.job_number             as w2_job_number\r\n,w2.sum_valid_offline      as w2_sum_valid_offline\r\n,w2.sum_valid_offline1     as w2_sum_valid_offline1\r\n,w2.sum_valid_online       as w2_sum_valid_online\r\n,wt2.offline_target        as wt2_offline_target\r\n,wt2.online_target         as wt2_online_target \r\nFROM\r\n(--本周拜访数据\r\nSELECT\r\nd.job_number\r\n,sum(d.sum_valid_offline   ) as sum_valid_offline\r\n,sum(d.sum_valid_offline1  ) as sum_valid_offline1\r\n,sum(d.sum_valid_online    ) as sum_valid_online\r\nFROM\r\ntab1 d\r\nwhere d.d_week2\u003d(select d_week2 from dc_tmp.rili_date where \u00272022-05-16\u0027\u003dd_date)--当前周数\r\ngroup by job_number\r\n) w\r\nleft join\r\n(\r\n--本周拜访目标\r\nSELECT\r\nd.job_number\r\n,sum(d.offline_target ) as offline_target\r\n,sum(d.online_target  ) as online_target \r\nFROM\r\ntab1 d\r\nwhere d.d_week1\u003d(select d_week2 from dc_tmp.rili_date where \u00272022-05-16\u0027\u003dd_date)--当前周数\r\ngroup by job_number\r\n) wt\r\non w.job_number\u003dwt.job_number\r\nleft join \r\n(--本周-1拜访数据\r\nSELECT\r\nd.job_number\r\n,sum(d.sum_valid_offline   ) as sum_valid_offline\r\n,sum(d.sum_valid_offline1  ) as sum_valid_offline1\r\n,sum(d.sum_valid_online    ) as sum_valid_online\r\nFROM\r\ntab1 d\r\nwhere d.d_week2\u003d(select d_week2 from dc_tmp.rili_date where date_sub(\u00272022-05-16\u0027,7)\u003dd_date)--当前周数-1\r\ngroup by job_number\r\n) w1\r\non w.job_number\u003dw1.job_number\r\nleft join\r\n(\r\n--本周-1拜访目标\r\nSELECT\r\nd.job_number\r\n,sum(d.offline_target ) as offline_target\r\n,sum(d.online_target  ) as online_target \r\nFROM\r\ntab1 d\r\nwhere d.d_week1\u003d(select d_week2 from dc_tmp.rili_date where date_sub(\u00272022-05-16\u0027,7)\u003dd_date)--当前周数-1\r\ngroup by job_number\r\n) wt1\r\non w1.job_number\u003dwt1.job_number\r\nleft join\r\n(-- 人员对应部门、战队\r\nselect\r\ndept2_name\r\n,dept3_name\r\n,job_number\r\n,user_name\r\nfrom dc_dim.dim_emp_account_info_dd_1\r\nwhere partition_day \u003dto_date(date_sub(now(),1))\r\nand dept1_name\u003d\u0027CBG\u0027 AND post\u003d\u0027渠道经理\u0027 and (leave_time is null or substr(leave_time,1,7)\u003dsubstr(cast(now() as string),1,7))\r\nand dept3_name not like \u0027%分区%\u0027\r\n) a3\r\non w1.job_number\u003da3.job_number\r\nleft join\r\n(--本周-2拜访数据\r\nSELECT\r\nd.job_number\r\n,sum(d.sum_valid_offline   ) as sum_valid_offline\r\n,sum(d.sum_valid_offline1  ) as sum_valid_offline1\r\n,sum(d.sum_valid_online    ) as sum_valid_online\r\nFROM\r\ntab1 d\r\nwhere d.d_week2\u003d(select d_week2 from dc_tmp.rili_date where date_sub(\u00272022-05-16\u0027,14)\u003dd_date)--当前周数-2\r\ngroup by job_number\r\n) w2\r\non w1.job_number\u003dw2.job_number\r\nleft join\r\n(\r\n--本周-2拜访目标\r\nSELECT\r\nd.job_number\r\n,sum(d.offline_target ) as offline_target\r\n,sum(d.online_target  ) as online_target \r\nFROM\r\ntab1 d\r\nwhere d.d_week1\u003d(select d_week2 from dc_tmp.rili_date where date_sub(\u00272022-05-16\u0027,14)\u003dd_date)--当前周数-2\r\ngroup by job_number\r\n) wt2\r\non w1.job_number\u003dwt2.job_number",
+  "queryState": "RUNNING",
+  "attributes": {
+    "client_fetch_wait_time": "0",
+    "delegated_user": "operate",
+    "file_formats": "",
+    "query_status": "Rejected query from pool root.operate: request memory needed 42.82 GB per node is greater than memory available for admission 32.00 GB of pd-cdh-192-168-0-10-node:22000.\n\nUse the MEM_LIMIT query option to indicate how much memory is required per node.",
+    "admission_result": "Rejected",
+    "pool": "root.operate",
+    "session_id": "ee43035a3a338af7:649e7f3fb51a16a3",
+    "stats_corrupt": "false",
+    "oom": "false",
+    "planning_wait_time_percentage": "0",
+    "admission_wait": "1",
+    "connected_user": "hive",
+    "impala_version": "impalad version 3.2.0-cdh6.3.2 RELEASE (build 1bb9836227301b839a32c6bc230e35439d5984ac)",
+    "stats_missing": "true",
+    "planning_wait_time": "48",
+    "client_fetch_wait_time_percentage": "0",
+    "network_address": "::ffff:192.168.0.10:53498",
+    "session_type": "HIVESERVER2",
+    "estimated_per_node_peak_memory": "45974396333"
+  },
+  "durationMillis": 66007484,
+  "startTime": "2022-05-17T08:44:03.440Z",
+  "user": "operate",
+  "detailsAvailable": true,
+  "queryId": "974077aa7478856f:476d6f2e00000000",
+  "queryType": "QUERY"
+}
