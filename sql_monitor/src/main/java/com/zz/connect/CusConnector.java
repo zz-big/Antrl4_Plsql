@@ -1,9 +1,8 @@
-package zz.connect;
+package com.zz.connect;
 
-import org.springframework.stereotype.Service;
-import zz.util.MD5Util;
 
 import java.util.concurrent.ConcurrentHashMap;
+import com.zz.util.MD5Util;
 
 /**
  * Description:
@@ -11,8 +10,7 @@ import java.util.concurrent.ConcurrentHashMap;
  * @author zz
  * @date 2021/10/12
  */
-@Service
-public class Connector {
+public class CusConnector {
     private ConcurrentHashMap<String, ConnectionProviderHikariCP> poolMap = new ConcurrentHashMap<String, ConnectionProviderHikariCP>();
 
     public ConnectionProviderHikariCP getConnInPool(String driver, String url, String username, String password) {

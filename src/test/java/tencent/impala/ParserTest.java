@@ -1,6 +1,6 @@
 package tencent.impala;
 
-import org.apache.impala.analysis.*;
+// import org.apache.impala.analysis.*;
 import java.io.StringReader;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;

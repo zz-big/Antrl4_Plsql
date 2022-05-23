@@ -1,22 +1,23 @@
-package zz.atlas;
+package com.zz.atlas;
 
 import com.alibaba.fastjson.JSONArray;
 import com.alibaba.fastjson.JSONObject;
-import com.google.gson.JsonObject;
 import com.sun.jersey.core.util.MultivaluedMapImpl;
 import org.apache.atlas.AtlasClientV2;
 import org.apache.atlas.AtlasServiceException;
-import org.apache.atlas.model.SearchFilter;
-import org.apache.atlas.model.impexp.AtlasServer;
-import org.apache.atlas.model.instance.AtlasEntity;
-import org.apache.atlas.model.typedef.*;
-import org.apache.avro.data.Json;
-import org.neo4j.driver.v1.*;
+import org.neo4j.driver.v1.AuthTokens;
+import org.neo4j.driver.v1.Driver;
+import org.neo4j.driver.v1.GraphDatabase;
+import org.neo4j.driver.v1.Session;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.math.BigInteger;
-import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.util.*;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 
 import static org.neo4j.driver.v1.Values.parameters;
 
@@ -27,27 +28,39 @@ import static org.neo4j.driver.v1.Values.parameters;
  * @date 2022/5/11
  */
 public class RequestAtlasData {
+    static Logger logger = LoggerFactory.getLogger(RequestAtlasData.class);
+
+    //定时器
+    private static ScheduledExecutorService scheduledExecutor = Executors.newScheduledThreadPool(1);
+
+
     public static void main(String[] args) {
 
+        SimpleDateFormat dataFormat = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
 
+        scheduledExecutor.scheduleWithFixedDelay(new TimerTask() {
+
+            @Override
+            public void run() {
+                //毫秒
+                long endTime = new Date().getTime();
+                String batchTime = dataFormat.format(endTime);
+                logger.info("execTime-->" + batchTime);
+                new RequestAtlasData().exec();
+            }
+        }, 0, 600, TimeUnit.SECONDS);
+
+
+
+
+    }
+
+    public void exec() {
         AtlasClientV2 atlasClientV2 = new AtlasClientV2(new String[]{"http://192-168-80-52:21000"}, new String[]{"admin", "admin"});
 
         //neo4j
         Driver driver = GraphDatabase.driver("bolt://192-168-80-54/:7687", AuthTokens.basic("neo4j", "neo4j123"));
         Session session = driver.session();
-        JSONObject jsonObject = null;
-//
-//        MultivaluedMapImpl paramMap = new MultivaluedMapImpl();
-//        paramMap.add("typeName", "hive_table");//这里添加要搜索的类型
-//        paramMap.add("limit", "5000");//这里添加要搜索的类型
-//        paramMap.add("offset", "0");//这里添加要搜索的类型
-//        paramMap.add("query", "dws_data_map_shop_tags_dd*");//这里添加要搜索的类型
-//        try {
-//            jsonObject = atlasClientV2.callAPI(AtlasClientV2.API_V2.BASIC_SEARCH, JSONObject.class, paramMap);
-//            System.out.println("aaa");
-//        } catch (AtlasServiceException e) {
-//            e.printStackTrace();
-//        }
 
         try {
             ArrayList<String> neoTableGuidList = createNeoTable(atlasClientV2, session);
@@ -91,8 +104,10 @@ public class RequestAtlasData {
                     BigInteger createTime = attributes.getBigInteger("createTime");
                     String format = dataFormat.format(createTime);
 
-                    session.run("merge ( "+name+":"+db+"  {name: {name}, db: {db}, owner: {owner},  guid: {guid}})",
-                            parameters("name", name, "db", db, "owner", owner,  "guid", guid));
+                    session.run("merge ( " + name + ":" + db + "  {name: {name}, db: {db}, owner: {owner}})",
+                            // session.run("merge ( "+name+":"+db+"  {name: {name}, db: {db}, owner: {owner},  guid: {guid}})",
+                            //         parameters("name", name, "db", db, "owner", owner,  "guid", guid));
+                            parameters("name", name, "db", db, "owner", owner));
                     tableGuidList.add(guid);
                 }
             }
@@ -170,7 +185,7 @@ public class RequestAtlasData {
                         if (!toTypeName.equals("hive_table")) {
                             for (int j = 0; j < relations.size(); j++) {
                                 String entityIdFrom = relations.getJSONObject(j).getString("fromEntityId");
-                                if ( entityIdFrom.equals(toEntityId)) {
+                                if (entityIdFrom.equals(toEntityId)) {
                                     String entityIdTo = relations.getJSONObject(j).getString("toEntityId");
                                     JSONObject entityTo = guidEntityMap.getJSONObject(entityIdTo);
                                     String status = entityTo.getString("status");
@@ -189,7 +204,7 @@ public class RequestAtlasData {
                                     }
                                 }
                             }
-                        }else {
+                        } else {
                             tablesLinkHashMap.put("from", fromEntityId);
                             tablesLinkHashMap.put("to", toEntityId);
                             mapArrayList.add(tablesLinkHashMap);
@@ -201,13 +216,13 @@ public class RequestAtlasData {
             }
 
             for (Map<String, String> map : mapArrayList) {
-                String from = map.get("from");
-                String to = map.get("to");
+                // String from = map.get("from");
+                // String to = map.get("to");
                 String dbFrom = map.get("dbFrom");
                 String dbTo = map.get("dbTo");
                 String nameFrom = map.get("nameFrom");
                 String nameTo = map.get("nameTo");
-                session.run("match ( "+nameFrom+":"+dbFrom+" {guid:\'" + from + "\'}), ("+nameTo+":"+dbTo+" {guid:\'" + to + "\'}) MERGE ("+nameFrom+")-[:output]->("+nameTo+")");
+                session.run("match ( " + nameFrom + ":" + dbFrom + " {name:\'" + nameFrom + "\'}), (" + nameTo + ":" + dbTo + " {name:\'" + nameTo + "\'}) MERGE (" + nameFrom + ")-[:output]->(" + nameTo + ")");
 //                session.run("MERGE ("+nameFrom+":"+dbFrom+"{guid:\'" + from + "\'})-[:output]->("+nameTo+":"+dbTo+"{guid:\'" + to + "\'})");
             }
 

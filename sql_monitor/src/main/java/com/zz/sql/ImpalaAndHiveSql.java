@@ -1,7 +1,10 @@
-package zz.sql;
+package com.zz.sql;
 
+import com.alibaba.druid.DbType;
 import com.alibaba.fastjson.JSONArray;
 import com.alibaba.fastjson.JSONObject;
+import com.zz.connect.ConnectionProviderHikariCP;
+import com.zz.connect.CusConnector;
 import org.apache.http.auth.AuthScope;
 import org.apache.http.auth.UsernamePasswordCredentials;
 import org.apache.http.client.ClientProtocolException;
@@ -14,9 +17,7 @@ import org.apache.http.impl.client.HttpClients;
 import org.apache.http.util.EntityUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import zz.connect.ConnectionProviderHikariCP;
-import zz.connect.Connector;
-import zz.util.SqlUtils;
+import com.zz.util.SqlUtils;
 
 import java.io.IOException;
 import java.sql.Connection;
@@ -27,7 +28,6 @@ import java.text.SimpleDateFormat;
 import java.util.*;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 /**
@@ -44,7 +44,7 @@ public class ImpalaAndHiveSql {
     public static void main(String[] args) {
 
         //mysql
-        Connector connector = new Connector();
+        CusConnector connector = new CusConnector();
         String driver = "com.mysql.cj.jdbc.Driver";
         String url = "jdbc:mysql://pd-cdh-192-168-0-10-node:3306/sql_monitor";
         String usernameMysql = "root";
@@ -60,25 +60,25 @@ public class ImpalaAndHiveSql {
         ConnectionProviderHikariCP connInPool = connector.getConnInPool(driver, url, usernameMysql, passwordMysql);
         ImpalaAndHiveSql impalaAndHiveSql = new ImpalaAndHiveSql();
 
-        scheduledExecutor.scheduleWithFixedDelay(new TimerTask() {
-            long startTime = new Date().getTime() - 600000;
-//            long startTime = new Date().getTime() - 3600000;
-
-            @Override
-            public void run() {
-                //毫秒
-                long endTime = new Date().getTime();
-                String batchTime = dataFormat.format(endTime);
-                logger.info("starttime-->" + startTime);
-                logger.info("endTime-->" + endTime);
-                logger.info("batchTime-->" + batchTime);
-
-                impalaAndHiveSql.exec(username, password, dataFormat, connInPool, startTime, endTime, batchTime);
-                startTime = endTime + 1;
-            }
-        }, 0, 600, TimeUnit.SECONDS);
-//        }, 0, 3600, TimeUnit.SECONDS);
-
+//        scheduledExecutor.scheduleWithFixedDelay(new TimerTask() {
+        long startTime = new Date().getTime() - 600000;
+////            long startTime = new Date().getTime() - 3600000;
+//
+//            @Override
+//            public void run() {
+//                //毫秒
+        long endTime = new Date().getTime();
+        String batchTime = dataFormat.format(endTime);
+        logger.info("starttime-->" + startTime);
+        logger.info("endTime-->" + endTime);
+        logger.info("batchTime-->" + batchTime);
+//
+//                impalaAndHiveSql.exec(username, password, dataFormat, connInPool, startTime, endTime, batchTime);
+//                startTime = endTime + 1;
+//            }
+//        }, 0, 600, TimeUnit.SECONDS);
+////        }, 0, 3600, TimeUnit.SECONDS);
+        impalaAndHiveSql.exec(username, password, dataFormat, connInPool, startTime, endTime, batchTime);
     }
 
     public void exec(String username, String password, SimpleDateFormat dataFormat, ConnectionProviderHikariCP connInPool, long startTime, long endTime, String batchTime) {
@@ -91,8 +91,9 @@ public class ImpalaAndHiveSql {
                 .setDefaultCredentialsProvider(credsProvider)
                 .build();
 
+
         try {
-            ArrayList<String> impalaSqls = getImpalaSql(httpclient, endTime, startTime, connInPool, dataFormat, batchTime);
+//            ArrayList<String> impalaSqls = getImpalaSql(httpclient, endTime, startTime, connInPool, dataFormat, batchTime);
             ArrayList<String> hiveSqls = getHiveSql(httpclient, endTime, startTime, connInPool, dataFormat, batchTime);
             parserSql(connInPool, batchTime);
 
@@ -107,7 +108,7 @@ public class ImpalaAndHiveSql {
 
     public ArrayList<String> getImpalaSql(CloseableHttpClient httpclient, long endTime, long startTime, ConnectionProviderHikariCP connInPool, SimpleDateFormat dataFormat, String batchTime) {
 //            String encode = new URLCodec().encode("statement RLIKE \".*select.*\"");
-//            HttpGet httpget = new HttpGet("http://192-168-0-3:7180/api/v9/clusters/pd_cluster/services/impala/impalaQueries?startTime="
+//            HttpGet httpget = new HttpGet("http://pd-cdh-192-168-0-3-node:7180/api/v9/clusters/pd_cluster/services/impala/impalaQueries?startTime="
 //            +startTime  + "&endTime=" +endTime  + "&offset=0&limit=10&filters="+encode );
         //impala utc时区
         SimpleDateFormat dataFormat1 = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'");
@@ -116,7 +117,7 @@ public class ImpalaAndHiveSql {
         String to = dataFormat1.format(new Date(endTime));
         logger.info("impala fromTime-->" + from);
         logger.info("impala toTime-->" + to);
-        HttpGet httpget = new HttpGet("http://192-168-0-3:7180/api/v9/clusters/pd_cluster/services/impala/impalaQueries?from="
+        HttpGet httpget = new HttpGet("http://159.75.252.114:7180/api/v9/clusters/pd_cluster/services/impala/impalaQueries?from="
                 + from + "&to=" + to + "&offset=0&limit=1000");
 
         String sql = "replace into impala_sql_monitor(query_id,`database`,`sql`,query_state,connected_user,oom,ddl_type,query_type,start_time,end_time,duration_millis,update_time) values" +
@@ -180,6 +181,7 @@ public class ImpalaAndHiveSql {
             }
             ps.executeBatch();
         } catch (IOException | SQLException | ParseException e) {
+            logger.error(e.getMessage());
             e.printStackTrace();
         } finally {
             try {
@@ -193,14 +195,15 @@ public class ImpalaAndHiveSql {
     }
 
 
-    public ArrayList<String> getHiveSql(CloseableHttpClient httpclient, long endTime,
-                                        long startTime, ConnectionProviderHikariCP connInPool, SimpleDateFormat dataFormat, String batchTime) {
+    public ArrayList<String> getHiveSql(CloseableHttpClient httpclient, long endTime, long startTime, ConnectionProviderHikariCP connInPool, SimpleDateFormat dataFormat, String batchTime) {
 
-        HttpGet httpget = new HttpGet("http://192-168-0-3:7180/cmf/yarn/completedApplications?" +
-                "startTime=" + startTime + "&endTime=" + endTime +
-                "&filters=hive_query_id%20RLIKE%20%22.*%22&offset=0&limit=1000" +
-                "&serviceName=yarn" +
-                "&histogramAttributes=adl_bytes_read%2Cadl_bytes_written%2Ccpu_milliseconds%2Cs3a_bytes_read%2Cs3a_bytes_written%2Cused_memory_max%2Cmb_millis%2Chdfs_bytes_written%2Cfile_bytes_written%2Callocated_vcore_seconds%2Callocated_memory_seconds%2Capplication_duration%2Cunused_vcore_seconds%2Cunused_memory_seconds%2Cpool%2Cuser%2Chdfs_bytes_read%2Cfile_bytes_read");
+//        HttpGet httpget = new HttpGet("http://159.75.252.114:7180/cmf/yarn/completedApplications?" +
+//                "startTime=" + startTime + "&endTime=" + endTime +
+//                "&filters=hive_query_id%20RLIKE%20%22.*%22&offset=0&limit=1000" +
+//                "&serviceName=yarn" +
+//                "&histogramAttributes=adl_bytes_read%2Cadl_bytes_written%2Ccpu_milliseconds%2Cs3a_bytes_read%2Cs3a_bytes_written%2Cused_memory_max%2Cmb_millis%2Chdfs_bytes_written%2Cfile_bytes_written%2Callocated_vcore_seconds%2Callocated_memory_seconds%2Capplication_duration%2Cunused_vcore_seconds%2Cunused_memory_seconds%2Cpool%2Cuser%2Chdfs_bytes_read%2Cfile_bytes_read");
+
+        HttpGet httpget = new HttpGet("http://192-168-0-3:7180/cmf/yarn/completedApplications?startTime=1653288428511&endTime=1653290230772&filters=hive_query_id%20RLIKE%20%22.*%22&offset=0&limit=100&serviceName=yarn&histogramAttributes=adl_bytes_read%2Cadl_bytes_written%2Ccpu_milliseconds%2Cs3a_bytes_read%2Cs3a_bytes_written%2Cused_memory_max%2Cmb_millis%2Chdfs_bytes_written%2Cfile_bytes_written%2Callocated_vcore_seconds%2Callocated_memory_seconds%2Ctotal_launched_tasks%2Capplication_duration%2Cunused_vcore_seconds%2Cunused_memory_seconds%2Cpool%2Cuser%2Chdfs_bytes_read%2Cfile_bytes_read&_=1653290228699");
 
         String sql = "replace into hive_sql_monitor(job_id,query_id,`user`,start_time,end_time,isFailed,completed,pool,`sql`,update_time) values" +
                 "(?,?,?,?,?,?,?,?,?,?)";
@@ -257,10 +260,13 @@ public class ImpalaAndHiveSql {
             ps.executeBatch();
 
         } catch (SQLException sqlException) {
+            logger.error(sqlException.getMessage());
             sqlException.printStackTrace();
         } catch (ClientProtocolException e) {
+            logger.error(e.getMessage());
             e.printStackTrace();
-        } catch (IOException e) {
+        } catch (Exception e) {
+            logger.error(e.getMessage());
             e.printStackTrace();
         } finally {
             try {
@@ -295,10 +301,11 @@ public class ImpalaAndHiveSql {
 //                String strTree = ast.toStringTree();
 //                getTableList(strTree, tableListOne);
 //                List<String> listWithoutDuplicates = tableListOne.stream().distinct().collect(Collectors.toList());
-                List<String> tableNameList = SqlUtils.getTableNameList(sql);
+                List<String> tableNameList = SqlUtils.getTableNameList(sql, DbType.hive);
                 tableListImpala.addAll(tableNameList);
 
             } catch (Exception e) {
+                logger.error(e.getMessage());
                 e.printStackTrace();
                 errSqlListImpala.add(sql);
             }
@@ -313,10 +320,11 @@ public class ImpalaAndHiveSql {
 //                getTableList(strTree, tableListOne);
 //                List<String> listWithoutDuplicates = tableListOne.stream().distinct().collect(Collectors.toList());
 
-                List<String> tableNameList = SqlUtils.getTableNameList(sql);
+                List<String> tableNameList = SqlUtils.getTableNameList(sql, DbType.hive);
                 tableListHive.addAll(tableNameList);
 
             } catch (Exception e) {
+                logger.error(e.getMessage());
                 e.printStackTrace();
                 errSqlListHive.add(sql);
             }

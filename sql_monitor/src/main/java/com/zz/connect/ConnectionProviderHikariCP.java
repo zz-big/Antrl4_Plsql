@@ -1,4 +1,4 @@
-package zz.connect;
+package com.zz.connect;
 
 import com.zaxxer.hikari.HikariDataSource;
 import org.slf4j.Logger;

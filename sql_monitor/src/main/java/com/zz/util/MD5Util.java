@@ -1,4 +1,4 @@
-package zz.util;
+package com.zz.util;
 
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
