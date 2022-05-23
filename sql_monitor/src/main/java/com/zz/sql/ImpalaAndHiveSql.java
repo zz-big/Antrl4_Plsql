@@ -5,6 +5,7 @@ import com.alibaba.fastjson.JSONArray;
 import com.alibaba.fastjson.JSONObject;
 import com.zz.connect.ConnectionProviderHikariCP;
 import com.zz.connect.CusConnector;
+import com.zz.util.HttpUtils;
 import org.apache.http.auth.AuthScope;
 import org.apache.http.auth.UsernamePasswordCredentials;
 import org.apache.http.client.ClientProtocolException;
@@ -94,7 +95,7 @@ public class ImpalaAndHiveSql {
 
         try {
 //            ArrayList<String> impalaSqls = getImpalaSql(httpclient, endTime, startTime, connInPool, dataFormat, batchTime);
-            ArrayList<String> hiveSqls = getHiveSql(httpclient, endTime, startTime, connInPool, dataFormat, batchTime);
+            ArrayList<String> hiveSqls = getHiveSql(username, password, endTime, startTime, connInPool, dataFormat, batchTime);
             parserSql(connInPool, batchTime);
 
         } finally {
@@ -195,26 +196,26 @@ public class ImpalaAndHiveSql {
     }
 
 
-    public ArrayList<String> getHiveSql(CloseableHttpClient httpclient, long endTime, long startTime, ConnectionProviderHikariCP connInPool, SimpleDateFormat dataFormat, String batchTime) {
-
-//        HttpGet httpget = new HttpGet("http://159.75.252.114:7180/cmf/yarn/completedApplications?" +
-//                "startTime=" + startTime + "&endTime=" + endTime +
-//                "&filters=hive_query_id%20RLIKE%20%22.*%22&offset=0&limit=1000" +
-//                "&serviceName=yarn" +
-//                "&histogramAttributes=adl_bytes_read%2Cadl_bytes_written%2Ccpu_milliseconds%2Cs3a_bytes_read%2Cs3a_bytes_written%2Cused_memory_max%2Cmb_millis%2Chdfs_bytes_written%2Cfile_bytes_written%2Callocated_vcore_seconds%2Callocated_memory_seconds%2Capplication_duration%2Cunused_vcore_seconds%2Cunused_memory_seconds%2Cpool%2Cuser%2Chdfs_bytes_read%2Cfile_bytes_read");
-
-        HttpGet httpget = new HttpGet("http://192-168-0-3:7180/cmf/yarn/completedApplications?startTime=1653288428511&endTime=1653290230772&filters=hive_query_id%20RLIKE%20%22.*%22&offset=0&limit=100&serviceName=yarn&histogramAttributes=adl_bytes_read%2Cadl_bytes_written%2Ccpu_milliseconds%2Cs3a_bytes_read%2Cs3a_bytes_written%2Cused_memory_max%2Cmb_millis%2Chdfs_bytes_written%2Cfile_bytes_written%2Callocated_vcore_seconds%2Callocated_memory_seconds%2Ctotal_launched_tasks%2Capplication_duration%2Cunused_vcore_seconds%2Cunused_memory_seconds%2Cpool%2Cuser%2Chdfs_bytes_read%2Cfile_bytes_read&_=1653290228699");
+    public ArrayList<String> getHiveSql(String username, String password, long endTime, long startTime, ConnectionProviderHikariCP connInPool, SimpleDateFormat dataFormat, String batchTime) {
+        String url = "http://192-168-0-3:7180/cmf/yarn/completedApplications?" +
+                "startTime=" + startTime + "&endTime=" + endTime +
+                "&filters=hive_query_id%20RLIKE%20%22.*%22&offset=0&limit=1000" +
+                "&serviceName=yarn" +
+                "&histogramAttributes=adl_bytes_read%2Cadl_bytes_written%2Ccpu_milliseconds%2Cs3a_bytes_read%2Cs3a_bytes_written%2Cused_memory_max%2Cmb_millis%2Chdfs_bytes_written%2Cfile_bytes_written%2Callocated_vcore_seconds%2Callocated_memory_seconds%2Capplication_duration%2Cunused_vcore_seconds%2Cunused_memory_seconds%2Cpool%2Cuser%2Chdfs_bytes_read%2Cfile_bytes_read";
 
         String sql = "replace into hive_sql_monitor(job_id,query_id,`user`,start_time,end_time,isFailed,completed,pool,`sql`,update_time) values" +
                 "(?,?,?,?,?,?,?,?,?,?)";
 
-        CloseableHttpResponse response = null;
+        HashMap<String, String> headers = new HashMap<>();
+        headers.put("Content-Type", "application/json");
+        headers.put("Accept", "application/json");
+
         ArrayList<String> sqlsList = new ArrayList<String>();
         Connection connection = null;
 
         try {
-            response = httpclient.execute(httpget);
-            JSONObject jsonObject = JSONObject.parseObject(EntityUtils.toString(response.getEntity()));
+            String result = HttpUtils.getAccessByAuth(url, headers, username, password);
+            JSONObject jsonObject = JSONObject.parseObject(result);
             JSONArray items = jsonObject.getJSONArray("items");
 
             connection = connInPool.getConnection();
@@ -262,17 +263,13 @@ public class ImpalaAndHiveSql {
         } catch (SQLException sqlException) {
             logger.error(sqlException.getMessage());
             sqlException.printStackTrace();
-        } catch (ClientProtocolException e) {
-            logger.error(e.getMessage());
-            e.printStackTrace();
         } catch (Exception e) {
             logger.error(e.getMessage());
             e.printStackTrace();
         } finally {
             try {
-                response.close();
                 connection.close();
-            } catch (IOException | SQLException e) {
+            } catch (Exception e) {
                 e.printStackTrace();
             }
         }
