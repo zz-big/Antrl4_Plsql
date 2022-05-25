@@ -1,0 +1,42 @@
+create  table impala_sql_monitor(
+	query_id varchar(50) PRIMARY KEY,
+    `database` varchar(50) ,
+    `sql`  text,
+    query_state varchar(50),
+    connected_user  varchar(50),
+    oom boolean,
+    ddl_type  varchar(50),
+	query_type varchar(50),
+    start_time  datetime,
+	end_time datetime,
+    duration_millis  long,
+    update_time datetime
+);
+
+
+create  table hive_sql_monitor(
+	job_id varchar(50) PRIMARY KEY,
+    query_id varchar(250),
+   `user`  varchar(50),
+    start_time  datetime,
+	end_time datetime,
+	`state` varchar(50),
+	pool varchar(250),
+    `sql`  text,
+    update_time datetime
+);
+
+create table tables_statistics(
+	id int AUTO_INCREMENT PRIMARY KEY,
+	table_name varchar(250),
+	times int,
+	source varchar(100),
+	update_time datetime
+);
+
+create table err_parser_sql(
+	id int AUTO_INCREMENT PRIMARY KEY,
+	`sql` text,
+	source varchar(100),
+	create_time datetime
+);

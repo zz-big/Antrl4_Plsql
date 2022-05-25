@@ -29,6 +29,7 @@ import java.text.SimpleDateFormat;
 import java.util.*;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 /**
@@ -61,32 +62,32 @@ public class ImpalaAndHiveSql {
         ConnectionProviderHikariCP connInPool = connector.getConnInPool(driver, url, usernameMysql, passwordMysql);
         ImpalaAndHiveSql impalaAndHiveSql = new ImpalaAndHiveSql();
 
-//        scheduledExecutor.scheduleWithFixedDelay(new TimerTask() {
-        long startTime = new Date().getTime() - 600000;
-////            long startTime = new Date().getTime() - 3600000;
-//
-//            @Override
-//            public void run() {
-//                //毫秒
-        long endTime = new Date().getTime();
-        String batchTime = dataFormat.format(endTime);
-        logger.info("starttime-->" + startTime);
-        logger.info("endTime-->" + endTime);
-        logger.info("batchTime-->" + batchTime);
-//
-//                impalaAndHiveSql.exec(username, password, dataFormat, connInPool, startTime, endTime, batchTime);
-//                startTime = endTime + 1;
-//            }
-//        }, 0, 600, TimeUnit.SECONDS);
+        scheduledExecutor.scheduleWithFixedDelay(new TimerTask() {
+            long startTime = new Date().getTime() - 600000;
+//            long startTime = new Date().getTime() - 3600000;
+
+            @Override
+            public void run() {
+                //毫秒
+                long endTime = new Date().getTime();
+                String batchTime = dataFormat.format(endTime);
+                logger.info("starttime-->" + startTime);
+                logger.info("endTime-->" + endTime);
+                logger.info("batchTime-->" + batchTime);
+
+                impalaAndHiveSql.exec(username, password, dataFormat, connInPool, startTime, endTime, batchTime);
+                startTime = endTime + 1;
+            }
+        }, 0, 600, TimeUnit.SECONDS);
 ////        }, 0, 3600, TimeUnit.SECONDS);
-        impalaAndHiveSql.exec(username, password, dataFormat, connInPool, startTime, endTime, batchTime);
+//        impalaAndHiveSql.exec(username, password, dataFormat, connInPool, startTime, endTime, batchTime);
     }
 
     public void exec(String username, String password, SimpleDateFormat dataFormat, ConnectionProviderHikariCP connInPool, long startTime, long endTime, String batchTime) {
 
         CredentialsProvider credsProvider = new BasicCredentialsProvider();
         credsProvider.setCredentials(
-                new AuthScope("192-168-0-3", AuthScope.ANY_PORT),
+                new AuthScope("pd-cdh-192-168-0-3-node", AuthScope.ANY_PORT),
                 new UsernamePasswordCredentials(username, password));
         CloseableHttpClient httpclient = HttpClients.custom()
                 .setDefaultCredentialsProvider(credsProvider)
@@ -94,8 +95,8 @@ public class ImpalaAndHiveSql {
 
 
         try {
-//            ArrayList<String> impalaSqls = getImpalaSql(httpclient, endTime, startTime, connInPool, dataFormat, batchTime);
-            ArrayList<String> hiveSqls = getHiveSql(username, password, endTime, startTime, connInPool, dataFormat, batchTime);
+            ArrayList<String> impalaSqls = getImpalaSql(httpclient, endTime, startTime, connInPool, dataFormat, batchTime);
+            ArrayList<String> hiveSqls = getHiveSql(httpclient, endTime, startTime, connInPool, dataFormat, batchTime);
             parserSql(connInPool, batchTime);
 
         } finally {
@@ -118,7 +119,7 @@ public class ImpalaAndHiveSql {
         String to = dataFormat1.format(new Date(endTime));
         logger.info("impala fromTime-->" + from);
         logger.info("impala toTime-->" + to);
-        HttpGet httpget = new HttpGet("http://159.75.252.114:7180/api/v9/clusters/pd_cluster/services/impala/impalaQueries?from="
+        HttpGet httpget = new HttpGet("http://pd-cdh-192-168-0-3-node:7180/api/v9/clusters/pd_cluster/services/impala/impalaQueries?from="
                 + from + "&to=" + to + "&offset=0&limit=1000");
 
         String sql = "replace into impala_sql_monitor(query_id,`database`,`sql`,query_state,connected_user,oom,ddl_type,query_type,start_time,end_time,duration_millis,update_time) values" +
@@ -142,14 +143,14 @@ public class ImpalaAndHiveSql {
                 String statement = queriesJSONObject.getString("statement");
                 String queryState = queriesJSONObject.getString("queryState");
                 String endTimeQuery = "";
-                if (queryState.equals("FINISHED")) {
+                if (!queryState.equals("RUNNING")) {
                     endTimeQuery = queriesJSONObject.getString("endTime");
                     ps.setObject(10, dataFormat.format(dataFormat1.parse(endTimeQuery)));
                 } else {
                     ps.setObject(10, null);
                 }
                 JSONObject attributes = queriesJSONObject.getJSONObject("attributes");
-                String connectedUser = attributes.getString("connected_user");
+                String connectedUser = queriesJSONObject.getString("user");
                 String oom = attributes.getString("oom");
                 String ddlType = attributes.getString("ddl_type");
                 String startTimeQuery = queriesJSONObject.getString("startTime");
@@ -196,56 +197,77 @@ public class ImpalaAndHiveSql {
     }
 
 
-    public ArrayList<String> getHiveSql(String username, String password, long endTime, long startTime, ConnectionProviderHikariCP connInPool, SimpleDateFormat dataFormat, String batchTime) {
-        String url = "http://192-168-0-3:7180/cmf/yarn/completedApplications?" +
-                "startTime=" + startTime + "&endTime=" + endTime +
-                "&filters=hive_query_id%20RLIKE%20%22.*%22&offset=0&limit=1000" +
-                "&serviceName=yarn" +
-                "&histogramAttributes=adl_bytes_read%2Cadl_bytes_written%2Ccpu_milliseconds%2Cs3a_bytes_read%2Cs3a_bytes_written%2Cused_memory_max%2Cmb_millis%2Chdfs_bytes_written%2Cfile_bytes_written%2Callocated_vcore_seconds%2Callocated_memory_seconds%2Capplication_duration%2Cunused_vcore_seconds%2Cunused_memory_seconds%2Cpool%2Cuser%2Chdfs_bytes_read%2Cfile_bytes_read";
+    public ArrayList<String> getHiveSql(CloseableHttpClient httpclient, long endTime, long startTime, ConnectionProviderHikariCP connInPool, SimpleDateFormat dataFormat, String batchTime) {
+//        String url = "http://192-168-0-3:7180/cmf/yarn/completedApplications?" +
+//                "startTime=" + startTime + "&endTime=" + endTime +
+//                "&filters=hive_query_id%20RLIKE%20%22.*%22&offset=0&limit=1000" +
+//                "&serviceName=yarn" +
+//                "&histogramAttributes=adl_bytes_read%2Cadl_bytes_written%2Ccpu_milliseconds%2Cs3a_bytes_read%2Cs3a_bytes_written%2Cused_memory_max%2Cmb_millis%2Chdfs_bytes_written%2Cfile_bytes_written%2Callocated_vcore_seconds%2Callocated_memory_seconds%2Capplication_duration%2Cunused_vcore_seconds%2Cunused_memory_seconds%2Cpool%2Cuser%2Chdfs_bytes_read%2Cfile_bytes_read";
+//        HttpGet httpget = new HttpGet(url);
+        SimpleDateFormat dataFormat1 = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'");
+        dataFormat1.setTimeZone(TimeZone.getTimeZone("UTC"));
+        String from = dataFormat1.format(new Date(startTime));
+        String to = dataFormat1.format(new Date(endTime));
+        logger.info("hive fromTime-->" + from);
+        logger.info("hive toTime-->" + to);
 
-        String sql = "replace into hive_sql_monitor(job_id,query_id,`user`,start_time,end_time,isFailed,completed,pool,`sql`,update_time) values" +
-                "(?,?,?,?,?,?,?,?,?,?)";
+
+        HttpGet httpget = new HttpGet("http://pd-cdh-192-168-0-3-node:7180/api/v9/clusters/pd_cluster/services/yarn/yarnApplications?" +
+                "from=" + from + "&to=" + to +
+                "&offset=0&limit=1000");
+        String sql = "replace into hive_sql_monitor(job_id,query_id,`user`,start_time,end_time,`state`,pool,`sql`,update_time) values" +
+                "(?,?,?,?,?,?,?,?,?)";
 
         HashMap<String, String> headers = new HashMap<>();
         headers.put("Content-Type", "application/json");
         headers.put("Accept", "application/json");
 
+        CloseableHttpResponse response = null;
         ArrayList<String> sqlsList = new ArrayList<String>();
         Connection connection = null;
 
         try {
-            String result = HttpUtils.getAccessByAuth(url, headers, username, password);
-            JSONObject jsonObject = JSONObject.parseObject(result);
-            JSONArray items = jsonObject.getJSONArray("items");
+            response = httpclient.execute(httpget);
+//            String result = HttpUtils.getAccessByAuth(url, headers, username, password);
+            JSONObject jsonObject = JSONObject.parseObject(EntityUtils.toString(response.getEntity()));
+            JSONArray applications = jsonObject.getJSONArray("applications");
 
             connection = connInPool.getConnection();
             PreparedStatement ps = connection.prepareStatement(sql);
 
-            for (int i = 0; i < items.size(); i++) {
-                JSONObject queriesJSONObject = items.getJSONObject(i);
-                String isFailed = queriesJSONObject.getString("isFailed");
-                String startTimeQuery = queriesJSONObject.getJSONObject("startTime").getString("millis");
-                String endTimeQuery = queriesJSONObject.getJSONObject("endTime").getString("millis");
-                String id = queriesJSONObject.getString("id");
+            for (int i = 0; i < applications.size(); i++) {
+                JSONObject queriesJSONObject = applications.getJSONObject(i);
+                JSONObject attributes = queriesJSONObject.getJSONObject("attributes");
 
-                JSONObject syntheticAttributes = queriesJSONObject.getJSONObject("syntheticAttributes");
-                String hiveQueryId = syntheticAttributes.getString("hive_query_id");
-                String hiveQueryString = syntheticAttributes.getString("hive_query_string");
+                String id = queriesJSONObject.getString("applicationId");
+                String user = queriesJSONObject.getString("user");
+                String state = queriesJSONObject.getString("state");
+                String startTimeQuery = queriesJSONObject.getString("startTime");
+                String endTimeQuery = null;
+                String hiveQueryId = null;
+                String hiveQueryString = null;
+
+                if (!state.equals("RUNNING")) {
+                    endTimeQuery = queriesJSONObject.getString("endTime");
+                    ps.setObject(5, dataFormat.format(dataFormat1.parse(endTimeQuery)));
+                    hiveQueryId = attributes.getString("hive_query_id");
+                    hiveQueryString = attributes.getString("hive_query_string");
+                } else {
+                    ps.setObject(5, null);
+                }
 
                 String pool = queriesJSONObject.getString("pool");
-                String completed = queriesJSONObject.getString("completed");
-                String user = queriesJSONObject.getString("user");
+
 
                 ps.setObject(1, id);
                 ps.setObject(2, hiveQueryId);
                 ps.setObject(3, user);
-                ps.setObject(4, dataFormat.format(new Date(Long.valueOf(startTimeQuery))));
-                ps.setObject(5, dataFormat.format(new Date(Long.valueOf((endTimeQuery)))));
-                ps.setObject(6, Boolean.valueOf(isFailed));
-                ps.setObject(7, Boolean.valueOf(completed));
-                ps.setObject(8, pool);
-                ps.setObject(9, hiveQueryString);
-                ps.setObject(10, batchTime);
+                ps.setObject(4, dataFormat.format(dataFormat1.parse(startTimeQuery)));
+
+                ps.setObject(6, state);
+                ps.setObject(7, pool);
+                ps.setObject(8, hiveQueryString);
+                ps.setObject(9, batchTime);
 
                 sqlsList.add(hiveQueryString);
 
@@ -281,7 +303,7 @@ public class ImpalaAndHiveSql {
 
         String insertSql = "insert into tables_statistics(table_name,times,source,update_time) values(?,?,?,?)";
         String insertErrSql = "insert into err_parser_sql(`sql`,source,create_time) values(?,?,?)";
-        List<Map<String, Object>> hiveSqls = connInPool.excuteQuery("select `sql`  from hive_sql_monitor  where update_time =\'" + batchTime + "\' and completed = true group  by query_id, `sql`");
+        List<Map<String, Object>> hiveSqls = connInPool.excuteQuery("select `sql`  from hive_sql_monitor  where update_time =\'" + batchTime + "\' and `state` != 'RUNNING' group  by query_id, `sql`");
         List<Map<String, Object>> impalaSqls = connInPool.excuteQuery("select `sql`  from impala_sql_monitor where update_time =\'" + batchTime + "\' and query_state='FINISHED' and query_type='QUERY' group  by query_id ");
 
         ArrayList<String> tableListHive = new ArrayList<String>();
@@ -376,6 +398,89 @@ public class ImpalaAndHiveSql {
             getTableList(substring1, list);
         }
     }
+
+//    public ArrayList<String> getHiveSql(String username, String password, long endTime, long startTime, ConnectionProviderHikariCP connInPool, SimpleDateFormat dataFormat, String batchTime) {
+////        String url = "http://192-168-0-3:7180/cmf/yarn/completedApplications?" +
+////                "startTime=" + startTime + "&endTime=" + endTime +
+////                "&filters=hive_query_id%20RLIKE%20%22.*%22&offset=0&limit=1000" +
+////                "&serviceName=yarn" +
+////                "&histogramAttributes=adl_bytes_read%2Cadl_bytes_written%2Ccpu_milliseconds%2Cs3a_bytes_read%2Cs3a_bytes_written%2Cused_memory_max%2Cmb_millis%2Chdfs_bytes_written%2Cfile_bytes_written%2Callocated_vcore_seconds%2Callocated_memory_seconds%2Capplication_duration%2Cunused_vcore_seconds%2Cunused_memory_seconds%2Cpool%2Cuser%2Chdfs_bytes_read%2Cfile_bytes_read";
+//        String url = "http://192-168-0-3:7180/api/v9/clusters/pd_cluster/services/yarn/yarnApplications?" +
+//                "startTime=" + startTime + "&endTime=" + endTime +
+//                "&offset=0&limit=1000";
+//        String sql = "replace into hive_sql_monitor(job_id,query_id,`user`,start_time,end_time,isFailed,completed,pool,`sql`,update_time) values" +
+//                "(?,?,?,?,?,?,?,?,?,?)";
+//
+//        HashMap<String, String> headers = new HashMap<>();
+//        headers.put("Content-Type", "application/json");
+//        headers.put("Accept", "application/json");
+//
+//        ArrayList<String> sqlsList = new ArrayList<String>();
+//        Connection connection = null;
+//
+//        try {
+//            String result = HttpUtils.getAccessByAuth(url, headers, username, password);
+//            JSONObject jsonObject = JSONObject.parseObject(result);
+//            JSONArray items = jsonObject.getJSONArray("items");
+//
+//            connection = connInPool.getConnection();
+//            PreparedStatement ps = connection.prepareStatement(sql);
+//
+//            for (int i = 0; i < items.size(); i++) {
+//                JSONObject queriesJSONObject = items.getJSONObject(i);
+//                String isFailed = queriesJSONObject.getString("isFailed");
+//                String startTimeQuery = queriesJSONObject.getJSONObject("startTime").getString("millis");
+//                String endTimeQuery = queriesJSONObject.getJSONObject("endTime").getString("millis");
+//                String id = queriesJSONObject.getString("id");
+//
+//                JSONObject syntheticAttributes = queriesJSONObject.getJSONObject("syntheticAttributes");
+//                String hiveQueryId = syntheticAttributes.getString("hive_query_id");
+//                String hiveQueryString = syntheticAttributes.getString("hive_query_string");
+//
+//                String pool = queriesJSONObject.getString("pool");
+//                String completed = queriesJSONObject.getString("completed");
+//                String user = queriesJSONObject.getString("user");
+//
+//                ps.setObject(1, id);
+//                ps.setObject(2, hiveQueryId);
+//                ps.setObject(3, user);
+//                ps.setObject(4, dataFormat.format(new Date(Long.valueOf(startTimeQuery))));
+//                ps.setObject(5, dataFormat.format(new Date(Long.valueOf((endTimeQuery)))));
+//                ps.setObject(6, Boolean.valueOf(isFailed));
+//                ps.setObject(7, Boolean.valueOf(completed));
+//                ps.setObject(8, pool);
+//                ps.setObject(9, hiveQueryString);
+//                ps.setObject(10, batchTime);
+//
+//                sqlsList.add(hiveQueryString);
+//
+//                //"攒"sql
+//                ps.addBatch();
+//                if (i % 50 == 0) {
+//                    //2.执行batch
+//                    ps.executeBatch();
+//                    //3.清空batch
+//                    ps.clearBatch();
+//                }
+//            }
+//            ps.executeBatch();
+//
+//        } catch (SQLException sqlException) {
+//            logger.error(sqlException.getMessage());
+//            sqlException.printStackTrace();
+//        } catch (Exception e) {
+//            logger.error(e.getMessage());
+//            e.printStackTrace();
+//        } finally {
+//            try {
+//                connection.close();
+//            } catch (Exception e) {
+//                e.printStackTrace();
+//            }
+//        }
+//
+//        return sqlsList;
+//    }
 
 
 }
