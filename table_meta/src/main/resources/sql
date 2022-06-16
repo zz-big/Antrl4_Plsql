@@ -1,0 +1,27 @@
+create table table_meta(
+ source_key varchar(50) comment "数据源url,sql,user,password取MD5",
+ ds_project_name varchar(250) comment "dolphinscheduler项目名",
+ source_db varchar(250) comment "数据源库",
+ source_tab_name varchar(250) comment "数据源表名",
+ source_tab_comment varchar(250) comment "数据源表注释",
+ source_col_name varchar(250) comment "数据源字段名",
+ source_col_type varchar(250) comment "数据源字段类型",
+ source_col_comment varchar(500) comment "数据源字段注释",
+ sink_tab_name varchar(250) comment "hive表名",
+ sink_col_name varchar(250) comment "hive字段名",
+ sink_col_type varchar(250) comment "hive字段类型",
+ sink_col_comment varchar(500) comment "hive字段注释",
+ create_time varchar(50) comment "创建时间"
+) comment "数据源元数据监控表";
+
+
+create table table_meta_monitor(
+ ds_project_name varchar(250) comment "dolphinscheduler项目名",
+ source_db varchar(250) comment "数据源库",
+ source_tab_name varchar(250) comment "数据源表名",
+ table_meta_today text comment "表元数据(today)",
+ table_meta_yesterday text comment "表元数据(yesterday)",
+ change_type varchar(250)  comment "变更类别",
+ change_info text  comment "变更信息",
+ create_time varchar(50) comment "创建时间"
+) comment "数据源元数据变化表"

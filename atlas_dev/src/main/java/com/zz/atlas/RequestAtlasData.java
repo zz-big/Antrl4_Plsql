@@ -59,7 +59,7 @@ public class RequestAtlasData {
         AtlasClientV2 atlasClientV2 = new AtlasClientV2(new String[]{"http://192-168-80-52:21000"}, new String[]{"admin", "admin"});
 
         //neo4j
-        Driver driver = GraphDatabase.driver("bolt://192-168-80-54/:7687", AuthTokens.basic("neo4j", "neo4j123"));
+        Driver driver = GraphDatabase.driver("bolt://192-168-80-54:7687", AuthTokens.basic("neo4j", "neo4j123"));
         Session session = driver.session();
 
         try {
