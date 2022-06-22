@@ -48,7 +48,7 @@ public class ImpalaAndHiveSql {
         //mysql
         CusConnector connector = new CusConnector();
         String driver = "com.mysql.cj.jdbc.Driver";
-        String url = "jdbc:mysql://pd-cdh-192-168-0-10-node:3306/sql_monitor";
+        String url = "jdbc:mysql://pd-cdh-192-168-0-10-node:3306/sql_monitor?useSSL=false";
         String usernameMysql = "root";
         String passwordMysql = "pdroot21";
 

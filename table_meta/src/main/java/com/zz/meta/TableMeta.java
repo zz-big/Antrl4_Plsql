@@ -631,7 +631,7 @@ public class TableMeta {
 
         //监控变化
         long oneDay = 24 * 60 * 60 * 1000;
-        long initDelay = tableMeta.getTimeMillis("10:05:00") - System.currentTimeMillis();
+        long initDelay = tableMeta.getTimeMillis(execTime) - System.currentTimeMillis();
         initDelay = initDelay > 0 ? initDelay : oneDay + initDelay;
         tableMeta.scheduledExecutor.scheduleAtFixedRate(() -> {
             Date date = new Date();
