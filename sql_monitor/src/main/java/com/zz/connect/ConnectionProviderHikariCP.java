@@ -32,7 +32,7 @@ public class ConnectionProviderHikariCP {
     private static int idleTimeout = 60000;
     //一个连接的生命时长（毫秒），超时而且没被使用则被释放（retired），缺省:10分钟，建议设置比数据库超时时长少30秒，参考MySQL wait_timeout参数（show variables like '%timeout%';） -->
     private static int maxLifetime = 60000;
-    private static int minimumIdle = 4;
+    private static int minimumIdle = 1;
     // 连接池中允许的最大连接数。缺省值：10；推荐的公式：((core_count * 2) + effective_spindle_count) -->
     private static int maximumPoolSize = 15;
 

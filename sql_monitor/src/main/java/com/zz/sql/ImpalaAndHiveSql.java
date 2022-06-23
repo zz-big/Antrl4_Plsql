@@ -57,30 +57,60 @@ public class ImpalaAndHiveSql {
         String password = "admin";
 
         SimpleDateFormat dataFormat = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
+        SimpleDateFormat dataFormatSql = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss");
         dataFormat.setTimeZone(TimeZone.getTimeZone("GMT+8"));
+        dataFormatSql.setTimeZone(TimeZone.getTimeZone("GMT+8"));
 
         ConnectionProviderHikariCP connInPool = connector.getConnInPool(driver, url, usernameMysql, passwordMysql);
         ImpalaAndHiveSql impalaAndHiveSql = new ImpalaAndHiveSql();
 
+        //程序挂掉再启动补数据
+        Object impalaTimeMax = connInPool.excuteQuery("select  max(update_time) as max_time from sql_monitor.impala_sql_monitor").get(0).get("max_time");
+        Object hiveTimeMax = connInPool.excuteQuery("select  max(update_time) as max_time from sql_monitor.hive_sql_monitor").get(0).get("max_time");
+        long endTime = System.currentTimeMillis();
+        long finalEndTime = endTime;
+        try {
+
+            long impalaTime = dataFormatSql.parse(String.valueOf(impalaTimeMax)).getTime();
+            long hiveTime = dataFormatSql.parse(String.valueOf(hiveTimeMax)).getTime();
+            long maxTime = Math.max(impalaTime, hiveTime);
+            //最大时间和现在差值大于10min
+            if ((endTime - maxTime) > 600000) {
+                long startTime = endTime - 600000;
+                while (maxTime < startTime) {
+                    String batchTime = dataFormat.format(endTime);
+                    System.out.println("Recover historical data!");
+                    impalaAndHiveSql.exec(username, password, dataFormat, connInPool, startTime, endTime, batchTime);
+                    endTime -= 600001;
+                    startTime = endTime - 600000;
+                }
+                //还差maxTime ~ endTime 这一段不到10分钟的
+                String batchTime = dataFormat.format(endTime);
+                System.out.println("Recover historical data!");
+                impalaAndHiveSql.exec(username, password, dataFormat, connInPool, maxTime, endTime, batchTime);
+            }
+
+        } catch (ParseException e) {
+            e.printStackTrace();
+        }
+
         scheduledExecutor.scheduleWithFixedDelay(new TimerTask() {
-            long startTime = new Date().getTime() - 600000;
+            long startTime = finalEndTime - 600000;
 //            long startTime = new Date().getTime() - 3600000;
 
             @Override
             public void run() {
                 //毫秒
-                long endTime = new Date().getTime();
-                String batchTime = dataFormat.format(endTime);
+
+                String batchTime = dataFormat.format(finalEndTime);
                 logger.info("starttime-->" + startTime);
-                logger.info("endTime-->" + endTime);
+                logger.info("endTime-->" + finalEndTime);
                 logger.info("batchTime-->" + batchTime);
 
-                impalaAndHiveSql.exec(username, password, dataFormat, connInPool, startTime, endTime, batchTime);
-                startTime = endTime + 1;
+                impalaAndHiveSql.exec(username, password, dataFormat, connInPool, startTime, finalEndTime, batchTime);
+                startTime = finalEndTime + 1;
             }
-        }, 0, 600, TimeUnit.SECONDS);
-////        }, 0, 3600, TimeUnit.SECONDS);
-//        impalaAndHiveSql.exec(username, password, dataFormat, connInPool, startTime, endTime, batchTime);
+        }, 600, 600, TimeUnit.SECONDS);
     }
 
     public void exec(String username, String password, SimpleDateFormat dataFormat, ConnectionProviderHikariCP connInPool, long startTime, long endTime, String batchTime) {
@@ -182,6 +212,8 @@ public class ImpalaAndHiveSql {
                 }
             }
             ps.executeBatch();
+            ps.clearBatch();
+            logger.info("impala execute successfully!");
         } catch (IOException | SQLException | ParseException e) {
             logger.error(e.getMessage());
             e.printStackTrace();
@@ -281,7 +313,8 @@ public class ImpalaAndHiveSql {
                 }
             }
             ps.executeBatch();
-
+            ps.clearBatch();
+            logger.info("hive execute successfully!");
         } catch (SQLException sqlException) {
             logger.error(sqlException.getMessage());
             sqlException.printStackTrace();

@@ -34,8 +34,8 @@ import java.util.stream.Collectors;
  */
 public class TableMeta {
 
-    //    private static String propertiesPath = TableMeta.class.getClassLoader().getResource("table_meta.properties").getPath();
-    private static String propertiesPath = "table_meta.properties";
+        private static String propertiesPath = TableMeta.class.getClassLoader().getResource("table_meta.properties").getPath();
+//    private static String propertiesPath = "table_meta.properties";
 
     private ScheduledExecutorService scheduledExecutor = Executors.newScheduledThreadPool(1);
 
@@ -621,7 +621,7 @@ public class TableMeta {
     }
 
 
-    public static void main(String[] args) {
+    public static void main(String[] args) throws ParseException {
         TableMeta tableMeta = new TableMeta();
         tableMeta.init();
         //本地mysql
@@ -629,32 +629,33 @@ public class TableMeta {
 
         ConnectionProviderHikariCP hiveConn = tableMeta.getConnInPool(hiveDriver, hiveUrl, hiveUsername, hivePassword);
 
-        //监控变化
-        long oneDay = 24 * 60 * 60 * 1000;
-        long initDelay = tableMeta.getTimeMillis(execTime) - System.currentTimeMillis();
-        initDelay = initDelay > 0 ? initDelay : oneDay + initDelay;
-        tableMeta.scheduledExecutor.scheduleAtFixedRate(() -> {
-            Date date = new Date();
-            String nowTime = timeFormat.format(date);
-            String today = simpleDateFormat.format(date);
-            System.out.println("nowTime--->" + nowTime);
-
-            try {
-                boolean exec = tableMeta.exec(tableMeta, mysqlConn, hiveConn, today, nowTime);
-                tableMeta.stat(tableMeta, mysqlConn, today, nowTime);
-            } catch (Exception e) {
-                e.printStackTrace();
-            }
-        }, initDelay, oneDay, TimeUnit.MILLISECONDS);
-//        Date date = new Date();
-//        String nowTime = timeFormat.format(date);
-//        String today = simpleDateFormat.format(date);
-//        try {
-////            tableMeta.exec(tableMeta, mysqlConn, hiveConn, today, nowTime);
-//            tableMeta.stat(tableMeta, mysqlConn, today, nowTime);
-//        } catch (Exception e) {
-//            e.printStackTrace();
-//        }
+//        //监控变化
+//        long oneDay = 24 * 60 * 60 * 1000;
+//        long initDelay = tableMeta.getTimeMillis(execTime) - System.currentTimeMillis();
+//        initDelay = initDelay > 0 ? initDelay : oneDay + initDelay;
+//        tableMeta.scheduledExecutor.scheduleAtFixedRate(() -> {
+//            Date date = new Date();
+//            String nowTime = timeFormat.format(date);
+//            String today = simpleDateFormat.format(date);
+//            System.out.println("nowTime--->" + nowTime);
+//
+//            try {
+//                boolean exec = tableMeta.exec(tableMeta, mysqlConn, hiveConn, today, nowTime);
+//                tableMeta.stat(tableMeta, mysqlConn, today, nowTime);
+//            } catch (Exception e) {
+//                e.printStackTrace();
+//            }
+//        }, initDelay, oneDay, TimeUnit.MILLISECONDS);
+//        Date date = new Date("2022-06-22 23:50:00");
+        Date date =timeFormat.parse("2022-06-22 23:50:00");
+        String nowTime = timeFormat.format(date);
+        String today = simpleDateFormat.format(date);
+        try {
+            tableMeta.exec(tableMeta, mysqlConn, hiveConn, today, nowTime);
+            tableMeta.stat(tableMeta, mysqlConn, today, nowTime);
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
     }
 
 
